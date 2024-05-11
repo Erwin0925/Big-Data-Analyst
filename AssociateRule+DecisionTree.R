@@ -3,6 +3,9 @@ library(arules)
 library(rpart)
 library(rpart.plot)
 library(caret)
+library(cluster)
+library(ggplot2)
+library(factoextra)
 
 ## Read the CSV file
 data <- read.csv("MSFactors.csv")
@@ -11,13 +14,66 @@ data <- read.csv("MSFactors.csv")
 data_selected <- data[, c("BMI", "WaistCirc", "BloodGlucose", 
                              "HDL", "Trigylcerides", "Hypertension")]
 
-##Factorize the Target 
-data_selected$Hypertension <- factor(data_selected$Hypertension, levels = c(0, 1), labels = c("No Hypertension", "Has Hypertension"))
-
 ## Replace the column name to a more readable name
 names(data_selected) <- c("BMI", "WaistCircumference", "BloodGlucose", 
                           "HighDensityLipoprotein", "Triglycerides", "Hypertension")
 
+###------------------------K Mean Algo------------------------###
+data_selected_km <- data_selected
+
+# Perform PCA
+pca_result <- prcomp(data_selected_km, scale. = TRUE)
+
+# Visualize the cumulative proportion of variance explained
+fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 100))
+
+# Transform the data using the selected number of components
+pca_data <- predict(pca_result, newdata = data_selected_km)
+
+
+# Elbow Method
+elbow_method <- function(data, max_k) {
+  wcss <- numeric(max_k)
+  for (i in 1:max_k) {
+    kmeans_result <- kmeans(data, centers = i)
+    wcss[i] <- kmeans_result$tot.withinss
+  }
+  plot(1:max_k, wcss, type = "b", pch = 19, xlab = "Number of Clusters (k)", ylab = "Within-Cluster Sum of Squares (WCSS)", main = "Elbow Method")
+}
+
+# Silhouette Analysis
+silhouette_analysis <- function(data, max_k) {
+  # Calculate distance matrix only once
+  dists <- dist(data)
+  
+  # Prepare to store average silhouette widths
+  silhouette_avg <- numeric(max_k)
+  
+  # Compute the average silhouette width for each number of clusters from 2 to max_k
+  for (i in 2:max_k) {
+    kmeans_result <- kmeans(data, centers = i)
+    sil_scores <- silhouette(kmeans_result$cluster, dists)
+    silhouette_avg[i] <- mean(sil_scores[, "sil_width"])
+  }
+  
+  # Plot the silhouette scores against number of clusters
+  plot(2:max_k, silhouette_avg[2:max_k], type = "b", pch = 19, xlab = "Number of Clusters (k)", ylab = "Average Silhouette Width", main = "Silhouette Analysis")
+}
+
+elbow_method(pca_data, 10)
+silhouette_analysis(pca_data, 10)
+
+
+kmeans_result <- kmeans(pca_data, centers = 2)
+
+# Visualize the clustering results
+fviz_cluster(kmeans_result, data = pca_data, geom = "point", stand = FALSE)
+
+kmeans_result$centers
+
+summary(pca_result)$rotation
+
+aggregate(data_selected_km, by=list(cluster=kmeans_result$cluster), FUN=mean)
 
 ###------------------------Association rules Technique------------------------###
 data_selected_ar <- data_selected
@@ -43,6 +99,10 @@ data_selected_ar$Triglycerides <- cut(data_selected_ar$Triglycerides,
                           breaks=c(-Inf, 150, 200, Inf),
                           labels=c("Normal", "High", "Very High"))
 
+data_selected_ar$Hypertension <- factor(data_selected_ar$Hypertension, levels = c(0, 1), 
+                                     labels = c("No Hypertension", "Has Hypertension"))
+
+## Filter the data
 data_selected_ar <- subset(data_selected_ar, Hypertension == "Has Hypertension")
 
 ## Creating transactions
@@ -85,6 +145,10 @@ data_selected_dt$Triglycerides <- cut(data_selected_dt$Triglycerides,
                                       breaks = c(-Inf, 150, Inf),
                                       labels = c("Normal", "Abnormal"),
                                       right = FALSE)
+
+data_selected_dt$Hypertension <- factor(data_selected_dt$Hypertension, levels = c(0, 1), 
+                                     labels = c("No Hypertension", "Has Hypertension"))
+
 
 ## Fitting the decision tree model
 tree_model <- rpart(Hypertension ~ .,data = data_selected_dt, method = "class")
