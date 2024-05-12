@@ -9,6 +9,7 @@ library(factoextra)
 library(grid)
 
 
+
 ## Load the CSV file
 data <- read.csv("MSFactors.csv")
 
@@ -81,3 +82,13 @@ print(grid_plot)
 
 ## Check for missing values
 colSums(is.na(feature_selected))
+
+## Check for negative value feature by feature
+any(feature_selected$BMI <= 0)
+any(feature_selected$WaistCircumference <= 0)
+any(feature_selected$BloodGlucose <= 0)
+any(feature_selected$HighDensityLipoprotein <= 0)
+any(feature_selected$Triglycerides <= 0)
+any(feature_selected$Albuminuria <= 0)
+any(feature_selected$UricAcid <= 0)
+any(feature_selected$Hypertension < 0)
